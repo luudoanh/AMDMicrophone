@@ -4,26 +4,52 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to attach the kext zip to"
+        required: false
+        type: string
   release:
     types: [published]
 
-env:
-  PROJECT_TYPE: KEXT
+permissions:
+  contents: write
 
 jobs:
   build:
-    name: Build
+    name: Build Kext
     runs-on: macos-latest
-    env:
-      JOB_TYPE: BUILD
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v4
         with:
           submodules: "recursive"
-      - run: xcodebuild -configuration Debug
-      - run: xcodebuild -configuration Release
-      - name: Upload to Artifacts
-        uses: actions/upload-artifact@v3
+
+      - name: Build Debug Version
+        run: xcodebuild -project AMDMicrophone.xcodeproj -scheme AMDMicrophone -configuration Debug SYMROOT=$PWD/build
+
+      - name: Build Release Version
+        run: xcodebuild -project AMDMicrophone.xcodeproj -scheme AMDMicrophone -configuration Release SYMROOT=$PWD/build
+
+      - name: Upload Kext Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          name: Artifacts
+          name: AMDMicrophone-Kexts
           path: build/*/*.kext
+
+      - name: Package Release Kext
+        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+        run: |
+          mkdir -p dist
+          ditto -c -k --sequesterRsrc --keepParent build/Release/AMDMicrophone.kext dist/AMDMicrophone.kext.zip
+
+      - name: Attach Kext To Release
+        if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME="${{ github.event.release.tag_name }}"
+          if [ -z "$TAG_NAME" ]; then
+            TAG_NAME="${{ inputs.release_tag }}"
+          fi
+          gh release upload "$TAG_NAME" dist/AMDMicrophone.kext.zip --clobber
