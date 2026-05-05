@@ -45,11 +45,7 @@ jobs:
 
       - name: Attach Kext To Release
         if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG_NAME="${{ github.event.release.tag_name }}"
-          if [ -z "$TAG_NAME" ]; then
-            TAG_NAME="${{ inputs.release_tag }}"
-          fi
-          gh release upload "$TAG_NAME" dist/AMDMicrophone.kext.zip --clobber
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name || inputs.release_tag }}
+          files: dist/AMDMicrophone.kext.zip
